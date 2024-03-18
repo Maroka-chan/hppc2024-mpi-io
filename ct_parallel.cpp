@@ -33,14 +33,20 @@ constexpr int detector_columns = 256;
  * @return          The data read
  */
 std::vector<float> read_file(uint64_t size, uint64_t offset, const std::string &filename) {
-    std::vector<float> data(size);
-    std::ifstream file(filename, std::ios::in | std::ifstream::binary);
-    if (not file.good()) {
-        throw std::runtime_error("Couldn't read to file: " + filename);
-    }
-    file.seekg(offset * sizeof(float), std::ios::beg);
-    file.read(reinterpret_cast<char *>(&data[0]), data.size() * sizeof(float));
-    return data;
+    //std::vector<float> data(size);
+    MPI_File fh;
+    MPI_File_open(MPI_COMM_WORLD, &filename[0], MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
+    //std::ifstream file(filename, std::ios::in | std::ifstream::binary);
+   // if (not fh->good()) {
+   //     throw std::runtime_error("Couldn't read to file: " + filename);
+   // }
+    MPI_Status status;
+    std::vector<float> buf(size);
+    int nints = size / (mpi_size * sizeof(int));
+    MPI_File_read_at(fh, offset, buf.data(), nints, MPI_FLOAT, &status);
+    //file.seekg(offset * sizeof(float), std::ios::beg);
+    //file.read(reinterpret_cast<char *>(&data[0]), data.size() * sizeof(float));
+    return buf;
 }
 
 /** Write binary file
@@ -137,16 +143,16 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
 
 
     // In case we need to split this and send it to each rank.. )MPI_I/O
-    if(rank==0){
-        GlobalData gdata = load_global_data(num_voxels, input_dir);
+   // if(rank==0){
+   //     GlobalData gdata = load_global_data(num_voxels, input_dir);
 
-        MPI_Isend();
+   //     MPI_Isend();
 
 
-    }
+   // }
     
     
-    // GlobalData gdata = load_global_data(num_voxels, input_dir);
+    GlobalData gdata = load_global_data(num_voxels, input_dir);
     // The size of the reconstruction volume is assumed a cube.
     uint64_t recon_volume_size = num_voxels * num_voxels * num_voxels;
     std::vector<float> recon_volume(recon_volume_size, 0);

@@ -134,13 +134,68 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
     auto begin = std::chrono::steady_clock::now();
 
     double checksum = 0;
-    GlobalData gdata = load_global_data(num_voxels, input_dir);
+
+
+    // In case we need to split this and send it to each rank.. )MPI_I/O
+    if(rank==0){
+        GlobalData gdata = load_global_data(num_voxels, input_dir);
+
+        MPI_Isend();
+
+
+    }
+    
+    
+    // GlobalData gdata = load_global_data(num_voxels, input_dir);
     // The size of the reconstruction volume is assumed a cube.
     uint64_t recon_volume_size = num_voxels * num_voxels * num_voxels;
     std::vector<float> recon_volume(recon_volume_size, 0);
 
     // TODO: change to only loop over the projections relevant for the MPI rank
-    for (int projection_id = 0; projection_id < num_projections; ++projection_id) {
+
+    
+    int num_projections_per_process = num_projections / mpi_size;
+    int num_projections_remainders = num_projections % mpi_size;
+    int projection_id;
+
+    for (int i = 0; i < num_projections_per_process; ++i) {
+    // for (int projection_id = 0; projection_id < num_projections; ++projection_id) {
+        projection_id = i*mpi_size + mpi_rank;
+
+
+        ProjectionData pdata = load_projection_data(projection_id, num_voxels, input_dir);
+
+        // TODO: Use OpenMP to parallelise local calculation
+        
+        for (int z = 0; z < num_voxels; ++z) {
+            uint64_t size = num_voxels * num_voxels;
+            for (uint64_t i = 0; i < size; ++i) {
+                // Find the mapping between volume voxels and detector pixels for the current projection angle
+                float vol_det_map_0 = 0, vol_det_map_1 = 0, vol_det_map_2 = 0;
+                for (uint64_t j = 0; j < 4; ++j) {
+                    float combined_val = (j == 2) ? gdata.z_voxel_coords[z] : gdata.combined_matrix[j * size + i];
+                    vol_det_map_0 += combined_val * pdata.transform_matrix[j];
+                    vol_det_map_1 += combined_val * pdata.transform_matrix[j + 4];
+                    vol_det_map_2 += combined_val * pdata.transform_matrix[j + 4 + 4];
+                }
+                int32_t map_col = std::round(vol_det_map_0 / vol_det_map_2);
+                int32_t map_row = std::round(vol_det_map_1 / vol_det_map_2);
+
+                // Find the detector pixels that contribute to the current slice
+                // x-rays that hit outside the detector area are masked out
+                if (map_col >= 0 && map_row >= 0 && map_col < detector_columns && map_row < detector_rows) {
+                    // Add the weighted projection pixel values to their corresponding voxels in the z slice
+                    recon_volume[z * size + i] +=
+                            pdata.projection[map_col + map_row * detector_columns] * pdata.volume_weight[i];
+                }
+            }
+        }
+    }
+
+    if(mpi_rank > num_projections_remainders){
+
+        projection_id = num_projections_per_process*mpi_size + mpi_rank;
+        
         ProjectionData pdata = load_projection_data(projection_id, num_voxels, input_dir);
 
         // TODO: Use OpenMP to parallelise local calculation
@@ -167,7 +222,9 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
                 }
             }
         }
+
     }
+
 
     // TODO: gather `recon_volume_size` from all the MPI-processes and combine (sum) them into the final reconstruction
     MPI_Barrier(MPI_COMM_WORLD);
@@ -216,6 +273,9 @@ int main(int argc, char **argv) {
 
     // Print off a hello world message
     printf("CT Reconstruction running on `%s`, rank %d out of %d.\n", processor_name, mpi_rank, mpi_size);
+
+
+
 
     reconstruction(num_voxels, input_dir, output_filename);
 

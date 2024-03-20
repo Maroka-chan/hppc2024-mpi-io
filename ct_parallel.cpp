@@ -247,5 +247,6 @@ int main(int argc, char **argv) {
     reconstruction(num_voxels, input_dir, output_filename);
 
     MPI_Finalize();
+    std::cout << "Successful!" << std::endl;
     return 0;
 }

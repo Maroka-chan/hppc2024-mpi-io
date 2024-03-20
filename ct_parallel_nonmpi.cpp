@@ -32,6 +32,7 @@ constexpr int detector_columns = 256;
  * @param filename  The filename
  * @return          The data read
  */
+
 std::vector<float> read_file(uint64_t size, uint64_t offset, const std::string &filename) {
     std::vector<float> data(size);
     std::ifstream file(filename, std::ios::in | std::ifstream::binary);
@@ -134,27 +135,36 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
     auto begin = std::chrono::steady_clock::now();
 
     double checksum = 0;
+    auto gread_begin = std::chrono::steady_clock::now();
     GlobalData gdata = load_global_data(num_voxels, input_dir);
+    auto gread_end = std::chrono::steady_clock::now();
+    auto read_time = gread_end - gread_begin;
     // The size of the reconstruction volume is assumed a cube.
     uint64_t recon_volume_size = num_voxels * num_voxels * num_voxels;
     std::vector<float> recon_volume(recon_volume_size, 0);
 
-    // TODO: change to only loop over the projections relevant for the MPI rank
-   // mpi_ratio = mpi_size / (mpi_rank+1)
-    //IF 4 PROCESSES
-    // int start_project = 0 + 80*(mpi_rank);
-    // int end_project = 80 + 80*(mpi_rank);
-    int chunk_size = num_projections / mpi_size;
-    int start_project = 0 + chunk_size*(mpi_rank);
-    int end_project = chunk_size + chunk_size*(mpi_rank);
-   // std::cout << " start " << start_project << " end " << end_project << " chunk " << chunk_size << std::end;
-    std::cout << " start " << start_project << " end "<< end_project << std::endl;
-    for (int projection_id = start_project; projection_id < end_project; ++projection_id) {
-        ProjectionData pdata = load_projection_data(projection_id, num_voxels, input_dir);
+    int slice_size_ = num_projections / mpi_size;
+    int slice_extra = num_projections % mpi_size;
 
+    int slice_start = slice_size_ * mpi_rank + std::min<uint64_t>(mpi_rank, slice_extra);
+    int slice_size = slice_size_ + (mpi_rank < slice_extra ? 1 : 0);
+
+    // TODO: change to only loop over the projections relevant for the MPI rank
+    for (int projection_id = slice_start; projection_id < slice_start + slice_size; ++projection_id) {
+        // Read data starting from slice_start with width slice_size and projection_id
+        // pass array mask
+        auto pread_begin = std::chrono::steady_clock::now();
+        ProjectionData pdata = load_projection_data(projection_id, num_voxels, input_dir);
+        auto pread_end = std::chrono::steady_clock::now();
+        read_time += pread_end-pread_begin;
+       // ProjectionData pdata = load_projection_data(projection_id, num_voxels, input_dir);
+        // std::cout << "rank " << mpi_rank << " id " << projection_id << std::endl;
+        
         // TODO: Use OpenMP to parallelise local calculation
+        #pragma omp parallel loop
         for (int z = 0; z < num_voxels; ++z) {
             uint64_t size = num_voxels * num_voxels;
+            #pragma omp loop
             for (uint64_t i = 0; i < size; ++i) {
                 // Find the mapping between volume voxels and detector pixels for the current projection angle
                 float vol_det_map_0 = 0, vol_det_map_1 = 0, vol_det_map_2 = 0;
@@ -177,37 +187,27 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
             }
         }
     }
-
     // TODO: gather `recon_volume_size` from all the MPI-processes and combine (sum) them into the final reconstruction
     MPI_Barrier(MPI_COMM_WORLD);
-    
-    // Use MPI_Allreduce to combine the partial reconstruction volumes
-    std::vector<float> global_recon_volume(recon_volume_size, 0);
-    MPI_Allreduce(recon_volume.data(), global_recon_volume.data(), recon_volume_size, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-    
-    if (!output_filename.empty() && mpi_rank == 0) {
-        // Only rank 0 writes the final reconstruction volume to disk
-        write_file(global_recon_volume, 0, output_filename);
+    std::vector<float> recon_volume_g(recon_volume_size, 0);
+   // std::cout <<"test1" << std::endl;
+    //MPI_Reduce(recon_volume.data(), recon_volume_g.data(), recon_volume_size, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+ //   std::cout <<"test2" << std::endl;
 
-        checksum += std::accumulate(global_recon_volume.begin(), global_recon_volume.end(), 0.0);
+    MPI_Reduce(recon_volume.data(), recon_volume_g.data(), recon_volume_size, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+    
+    if (mpi_rank == 0) {
+        if (!output_filename.empty()) {
+            write_file(recon_volume_g, 0, output_filename);
+        }
+        checksum += std::accumulate(recon_volume_g.begin(), recon_volume_g.end(), 0.0);
         auto end = std::chrono::steady_clock::now();
         std::cout << "checksum: " << checksum << std::endl;
         std::cout << "elapsed time: " << (end - begin).count() / 1000000000.0 << " sec" << std::endl;
+        std::cout << "read time: " << read_time.count() / 1000000000.0 << " sec" << std::endl;
 
+        
     }
-    // checksum += std::accumulate(recon_volume.begin(), recon_volume.end(), 0.0);
-    // auto end = std::chrono::steady_clock::now();
-    // std::cout << "checksum: " << checksum << std::endl;
-    // std::cout << "elapsed time: " << (end - begin).count() / 1000000000.0 << " sec" << std::endl;
-
-    // double total_checksum;
-
-    // MPI_Allreduce(&checksum, &total_checksum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-    // if (mpi_rank == 0) {
-    //     std::cout << "Total checksum: " << total_checksum << std::endl;
-    // }
-
 }
 
 

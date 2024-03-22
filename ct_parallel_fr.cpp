@@ -102,12 +102,15 @@ public:
 GlobalData load_global_data(int num_voxels, const std::string &input_dir) {
     std::string voxel_dir = input_dir + "/" + std::to_string(num_voxels);
     GlobalData data;
-
+    
+    printf("1 on rank %d\n", mpi_rank);
     // Load combined X,Y voxel coordinates
     data.combined_matrix = read_file(4 * num_voxels * num_voxels, 0, voxel_dir + "/combined.bin");
 
+    printf("2 on rank %d\n", mpi_rank);
     // Load Z voxel coordinates
     data.z_voxel_coords = read_file(num_voxels, 0, voxel_dir + "/z_voxel_coords.bin");
+    printf("3 on rank %d\n", mpi_rank);
 
     return data;
 }
@@ -252,8 +255,9 @@ int main(int argc, char **argv) {
     else {
         gdata.combined_matrix = std::vector<float>(4 * num_voxels * num_voxels);
         gdata.z_voxel_coords = std::vector<float>(num_voxels);
-        printf("set up g data on rank %d\n", mpi_rank);
+        //printf("set up g data on rank %d\n", mpi_rank);
     }
+    printf("before bcast cm on rank %d\n", mpi_rank);
     MPI_Bcast(&gdata.combined_matrix[0], 4 * num_voxels * num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
     printf("bcast cm on rank %d\n", mpi_rank);
     MPI_Bcast(&gdata.z_voxel_coords[0], num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);

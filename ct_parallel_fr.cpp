@@ -162,6 +162,7 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
     // Read data starting from slice_start with width slice_size and projection_id
     // pass array mask
     ProjectionData pdata = load_projection_data(slice_start, num_voxels, input_dir, slice_size);
+    printf("load p data on rank %d\n", mpi_rank);
     // TODO: change to only loop over the projections relevant for the MPI rank
     for (int projection_id = 0; projection_id < slice_size; ++projection_id) {
         // std::cout << "rank " << mpi_rank << " id " << projection_id << std::endl;
@@ -196,6 +197,7 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
     // TODO: gather `recon_volume_size` from all the MPI-processes and combine (sum) them into the final reconstruction
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Reduce(MPI_IN_PLACE, recon_volume.data(), recon_volume_size, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+    printf("reduce on rank %d\n", mpi_rank);
     if (mpi_rank == 0) {
         if (!output_filename.empty()) {
             write_file(recon_volume, 0, output_filename);
@@ -245,13 +247,17 @@ int main(int argc, char **argv) {
     GlobalData gdata;
     if (mpi_rank == 0){
         gdata = load_global_data(num_voxels, input_dir);
+        printf("read g data on rank %d\n", mpi_rank);
     }
     else {
         gdata.combined_matrix = std::vector<float>(4 * num_voxels * num_voxels);
         gdata.z_voxel_coords = std::vector<float>(num_voxels);
+        printf("set up g data on rank %d\n", mpi_rank);
     }
     MPI_Bcast(&gdata.combined_matrix, 4 * num_voxels * num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    printf("bcast cm on rank %d\n", mpi_rank);
     MPI_Bcast(&gdata.z_voxel_coords, num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    printf("bcast zvc on rank %d\n", mpi_rank);
     MPI_Barrier(MPI_COMM_WORLD);
     reconstruction(num_voxels, input_dir, output_filename, gdata);
 

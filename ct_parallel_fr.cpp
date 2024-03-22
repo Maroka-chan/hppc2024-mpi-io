@@ -43,22 +43,19 @@ std::vector<float> read_file(uint64_t size, uint64_t offset, const std::string &
     
     MPI_Status status;
     MPI_File fh;
-    printf("4 on rank %d\n", mpi_rank);
-    int error = MPI_File_open(MPI_COMM_WORLD, filename.c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
+    
+    int error = MPI_File_open(MPI_COMM_SELF, filename.c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
     if(error != MPI_SUCCESS) {
         throw std::runtime_error("Couldn't open file: " + filename);
     }
     // MPI_File_seek(fh, mpi_offset, MPI_SEEK_SET);
     // MPI_File_read(fh, reinterpret_cast<char *>(&data[0]), size, MPI_FLOAT, &status);
-    printf("5 on rank %d\n", mpi_rank);
     error = MPI_File_read_at_all(fh, offset * sizeof(float), data.data(), size, MPI_FLOAT, &status);
     // std::cout << "offset " << offset << " size " << size << " data[0] " << data[0] << " filename " << filename << " ERROR " << status.MPI_ERROR <<  std::endl;
     if(error != MPI_SUCCESS) {
         throw std::runtime_error("Couldn't read to file: " + filename);
     }
-    printf("6 on rank %d\n", mpi_rank);
     MPI_File_close(&fh);
-    printf("7 on rank %d\n", mpi_rank);
     return data;
 }
 
@@ -107,14 +104,11 @@ GlobalData load_global_data(int num_voxels, const std::string &input_dir) {
     std::string voxel_dir = input_dir + "/" + std::to_string(num_voxels);
     GlobalData data;
     
-    printf("1 on rank %d\n", mpi_rank);
     // Load combined X,Y voxel coordinates
     data.combined_matrix = read_file(4 * num_voxels * num_voxels, 0, voxel_dir + "/combined.bin");
 
-    printf("2 on rank %d\n", mpi_rank);
     // Load Z voxel coordinates
     data.z_voxel_coords = read_file(num_voxels, 0, voxel_dir + "/z_voxel_coords.bin");
-    printf("3 on rank %d\n", mpi_rank);
 
     return data;
 }
@@ -169,7 +163,6 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
     // Read data starting from slice_start with width slice_size and projection_id
     // pass array mask
     ProjectionData pdata = load_projection_data(slice_start, num_voxels, input_dir, slice_size);
-    printf("load p data on rank %d\n", mpi_rank);
     // TODO: change to only loop over the projections relevant for the MPI rank
     for (int projection_id = 0; projection_id < slice_size; ++projection_id) {
         // std::cout << "rank " << mpi_rank << " id " << projection_id << std::endl;
@@ -203,8 +196,11 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
     }
     // TODO: gather `recon_volume_size` from all the MPI-processes and combine (sum) them into the final reconstruction
     MPI_Barrier(MPI_COMM_WORLD);
-    MPI_Reduce(MPI_IN_PLACE, recon_volume.data(), recon_volume_size, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
-    printf("reduce on rank %d\n", mpi_rank);
+    if (mpi_rank == 0) {
+        MPI_Reduce(MPI_IN_PLACE, recon_volume.data(), recon_volume_size, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+    } else {
+        MPI_Reduce(recon_volume.data(), recon_volume.data(), recon_volume_size, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+    }
     if (mpi_rank == 0) {
         if (!output_filename.empty()) {
             write_file(recon_volume, 0, output_filename);
@@ -254,18 +250,13 @@ int main(int argc, char **argv) {
     GlobalData gdata;
     if (mpi_rank == 0){
         gdata = load_global_data(num_voxels, input_dir);
-        printf("read g data on rank %d\n", mpi_rank);
     }
     else {
         gdata.combined_matrix = std::vector<float>(4 * num_voxels * num_voxels);
         gdata.z_voxel_coords = std::vector<float>(num_voxels);
-        //printf("set up g data on rank %d\n", mpi_rank);
     }
-//    printf("before bcast cm on rank %d\n", mpi_rank);
     MPI_Bcast(&gdata.combined_matrix[0], 4 * num_voxels * num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
-    printf("bcast cm on rank %d\n", mpi_rank);
     MPI_Bcast(&gdata.z_voxel_coords[0], num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
-    printf("bcast zvc on rank %d\n", mpi_rank);
     MPI_Barrier(MPI_COMM_WORLD);
     reconstruction(num_voxels, input_dir, output_filename, gdata);
 

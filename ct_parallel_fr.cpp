@@ -254,9 +254,9 @@ int main(int argc, char **argv) {
         gdata.z_voxel_coords = std::vector<float>(num_voxels);
         printf("set up g data on rank %d\n", mpi_rank);
     }
-    MPI_Bcast(&gdata.combined_matrix, 4 * num_voxels * num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&gdata.combined_matrix[0], 4 * num_voxels * num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
     printf("bcast cm on rank %d\n", mpi_rank);
-    MPI_Bcast(&gdata.z_voxel_coords, num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&gdata.z_voxel_coords[0], num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
     printf("bcast zvc on rank %d\n", mpi_rank);
     MPI_Barrier(MPI_COMM_WORLD);
     reconstruction(num_voxels, input_dir, output_filename, gdata);

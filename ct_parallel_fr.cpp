@@ -164,6 +164,7 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
     // pass array mask
     ProjectionData pdata = load_projection_data(slice_start, num_voxels, input_dir, slice_size);
     // TODO: change to only loop over the projections relevant for the MPI rank
+    #pragma omp parallel for
     for (int projection_id = 0; projection_id < slice_size; ++projection_id) {
         // std::cout << "rank " << mpi_rank << " id " << projection_id << std::endl;
         // TODO: Use OpenMP to parallelise local calculation

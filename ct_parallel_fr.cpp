@@ -43,18 +43,22 @@ std::vector<float> read_file(uint64_t size, uint64_t offset, const std::string &
     
     MPI_Status status;
     MPI_File fh;
+    printf("4 on rank %d\n", mpi_rank);
     int error = MPI_File_open(MPI_COMM_WORLD, filename.c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
     if(error != MPI_SUCCESS) {
         throw std::runtime_error("Couldn't open file: " + filename);
     }
     // MPI_File_seek(fh, mpi_offset, MPI_SEEK_SET);
     // MPI_File_read(fh, reinterpret_cast<char *>(&data[0]), size, MPI_FLOAT, &status);
+    printf("5 on rank %d\n", mpi_rank);
     error = MPI_File_read_at_all(fh, offset * sizeof(float), data.data(), size, MPI_FLOAT, &status);
     // std::cout << "offset " << offset << " size " << size << " data[0] " << data[0] << " filename " << filename << " ERROR " << status.MPI_ERROR <<  std::endl;
     if(error != MPI_SUCCESS) {
         throw std::runtime_error("Couldn't read to file: " + filename);
     }
+    printf("6 on rank %d\n", mpi_rank);
     MPI_File_close(&fh);
+    printf("7 on rank %d\n", mpi_rank);
     return data;
 }
 
@@ -257,7 +261,7 @@ int main(int argc, char **argv) {
         gdata.z_voxel_coords = std::vector<float>(num_voxels);
         //printf("set up g data on rank %d\n", mpi_rank);
     }
-    printf("before bcast cm on rank %d\n", mpi_rank);
+//    printf("before bcast cm on rank %d\n", mpi_rank);
     MPI_Bcast(&gdata.combined_matrix[0], 4 * num_voxels * num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
     printf("bcast cm on rank %d\n", mpi_rank);
     MPI_Bcast(&gdata.z_voxel_coords[0], num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);

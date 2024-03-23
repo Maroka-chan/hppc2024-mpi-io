@@ -176,10 +176,10 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
 	    int offset3 = num_voxels * num_voxels *projection_id;
         // std::cout << "rank " << mpi_rank << " id " << projection_id << std::endl;
         // TODO: Use OpenMP to parallelise local calculation
-        // #pragma omp parallel loop
+        #pragma omp parallel loop
         for (int z = 0; z < num_voxels; ++z) {
             uint64_t size = num_voxels * num_voxels;
-            // #pragma omp loop
+            #pragma omp loop
             for (uint64_t i = 0; i < size; ++i) {
                 // Find the mapping between volume voxels and detector pixels for the current projection angle
                 float vol_det_map_0 = 0, vol_det_map_1 = 0, vol_det_map_2 = 0;

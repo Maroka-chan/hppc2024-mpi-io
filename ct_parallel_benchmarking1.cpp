@@ -129,7 +129,7 @@ ProjectionData load_projection_data(int projection_id, int num_voxels, const std
  * @param output_filename  The name of the output file
  * @param begin
  */
-void reconstruction(int num_voxels, const std::string &input_dir, const std::string &output_filename, &auto begin) {
+void reconstruction(int num_voxels, const std::string &input_dir, const std::string &output_filename, auto &begin) {
 
     
 
@@ -252,7 +252,7 @@ int main(int argc, char **argv) {
     // Notice, in this assignment we also time the disk access
     auto begin = std::chrono::steady_clock::now();
 
-    reconstruction(num_voxels, input_dir, output_filename);
+    reconstruction(num_voxels, input_dir, output_filename, begin);
 
     MPI_Finalize();
     return 0;

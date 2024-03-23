@@ -265,11 +265,9 @@ int main(int argc, char **argv) {
     std::chrono::steady_clock::time_point gread_end;
     std::chrono::steady_clock::time_point gread_begin;
 
+    gread_begin = std::chrono::steady_clock::now();
     if (mpi_rank == 0){
-        gread_begin = std::chrono::steady_clock::now();
         gdata = load_global_data(num_voxels, input_dir);
-        gread_end = std::chrono::steady_clock::now();
-        read_time = gread_end - gread_begin;
     }
     else {
         gdata.combined_matrix = std::vector<float>(4 * num_voxels * num_voxels);
@@ -277,7 +275,9 @@ int main(int argc, char **argv) {
     }
     MPI_Bcast(&gdata.combined_matrix[0], 4 * num_voxels * num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&gdata.z_voxel_coords[0], num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    gread_end = std::chrono::steady_clock::now();
     MPI_Barrier(MPI_COMM_WORLD);
+    read_time = gread_end - gread_begin;
     reconstruction(num_voxels, input_dir, output_filename, gdata, read_time, begin);
 
     MPI_Finalize();

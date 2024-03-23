@@ -142,12 +142,14 @@ ProjectionData load_projection_data(int projection_id, int num_voxels, const std
  * @param num_voxels       Number of voxels (assumed cubed)
  * @param input_dir        The CT data directory
  * @param output_filename  The name of the output file
+ * @param read_time
+ * @param begin
  */
-void reconstruction(int num_voxels, const std::string &input_dir, const std::string &output_filename, const GlobalData &gdata) {
+void reconstruction(int num_voxels, const std::string &input_dir, const std::string &output_filename, const GlobalData &gdata, std::chrono::duration<double> &read_time, auto &begin) {
 
     // TODO: time read of projection data, compute and write of results indepedently
     // Notice, in this assignment we also time the disk access
-    auto begin = std::chrono::steady_clock::now();
+    // auto begin = std::chrono::steady_clock::now();
 
     double checksum = 0;
     // The size of the reconstruction volume is assumed a cube.
@@ -162,7 +164,10 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
 
     // Read data starting from slice_start with width slice_size and projection_id
     // pass array mask
+    auto pread_begin = std::chrono::steady_clock::now();
     ProjectionData pdata = load_projection_data(slice_start, num_voxels, input_dir, slice_size);
+    auto pread_end = std::chrono::steady_clock::now();
+    read_time += pread_end-pread_begin;
     // TODO: change to only loop over the projections relevant for the MPI rank
     #pragma omp parallel for
     for (int projection_id = 0; projection_id < slice_size; ++projection_id) {
@@ -204,12 +209,17 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
     }
     if (mpi_rank == 0) {
         if (!output_filename.empty()) {
+            auto gwrite_begin = std::chrono::steady_clock::now();
             write_file(recon_volume, 0, output_filename);
+            auto gwrite_end = std::chrono::steady_clock::now();
+            auto write_time = gwrite_end - gwrite_begin;
+            std::cout << "write time: " << write_time.count() / 1000000000.0 << " sec" << std::endl;
         }
         checksum += std::accumulate(recon_volume.begin(), recon_volume.end(), 0.0);
         auto end = std::chrono::steady_clock::now();
         std::cout << "checksum: " << checksum << std::endl;
         std::cout << "elapsed time: " << (end - begin).count() / 1000000000.0 << " sec" << std::endl;
+        std::cout << "read time: " << read_time.count() / 1000000000.0 << " sec" << std::endl;
     }
 }
 
@@ -244,13 +254,22 @@ int main(int argc, char **argv) {
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
-
+    
 
     // Print off a hello world message
     printf("CT Reconstruction running on `%s`, rank %d out of %d.\n", processor_name, mpi_rank, mpi_size);
     GlobalData gdata;
+    
+    auto begin = std::chrono::steady_clock::now();
+    std::chrono::duration<double> read_time;
+    std::chrono::steady_clock::time_point gread_end;
+    std::chrono::steady_clock::time_point gread_begin;
+
     if (mpi_rank == 0){
+        gread_begin = std::chrono::steady_clock::now();
         gdata = load_global_data(num_voxels, input_dir);
+        gread_end = std::chrono::steady_clock::now();
+        read_time = gread_end - gread_begin;
     }
     else {
         gdata.combined_matrix = std::vector<float>(4 * num_voxels * num_voxels);
@@ -259,10 +278,9 @@ int main(int argc, char **argv) {
     MPI_Bcast(&gdata.combined_matrix[0], 4 * num_voxels * num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&gdata.z_voxel_coords[0], num_voxels, MPI_FLOAT, 0, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);
-    reconstruction(num_voxels, input_dir, output_filename, gdata);
+    reconstruction(num_voxels, input_dir, output_filename, gdata, read_time, begin);
 
     MPI_Finalize();
-    std::cout << "Successful!" << std::endl;
+    //std::cout << "Successful!" << std::endl;
     return 0;
 }
-

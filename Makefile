@@ -1,4 +1,4 @@
-LIB ?= -lm -L/usr/lib -pthread -fopenmp
+LIB ?= -lm -L/usr/lib -pthread -fopenmp  -march=native
 FLAGS ?= -O3 -DNDEBUG -g -Wall
 
 .PHONY: clean all

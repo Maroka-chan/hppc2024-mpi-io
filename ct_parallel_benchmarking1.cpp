@@ -127,12 +127,11 @@ ProjectionData load_projection_data(int projection_id, int num_voxels, const std
  * @param num_voxels       Number of voxels (assumed cubed)
  * @param input_dir        The CT data directory
  * @param output_filename  The name of the output file
+ * @param begin
  */
-void reconstruction(int num_voxels, const std::string &input_dir, const std::string &output_filename) {
+void reconstruction(int num_voxels, const std::string &input_dir, const std::string &output_filename, &auto begin) {
 
-    // TODO: time read of projection data, compute and write of results indepedently
-    // Notice, in this assignment we also time the disk access
-    auto begin = std::chrono::steady_clock::now();
+    
 
     double checksum = 0;
     auto gread_begin = std::chrono::steady_clock::now();
@@ -248,6 +247,10 @@ int main(int argc, char **argv) {
 
     // Print off a hello world message
     printf("CT Reconstruction running on `%s`, rank %d out of %d.\n", processor_name, mpi_rank, mpi_size);
+
+    // TODO: time read of projection data, compute and write of results indepedently
+    // Notice, in this assignment we also time the disk access
+    auto begin = std::chrono::steady_clock::now();
 
     reconstruction(num_voxels, input_dir, output_filename);
 

@@ -171,6 +171,9 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
     // TODO: change to only loop over the projections relevant for the MPI rank
     #pragma omp parallel for
     for (int projection_id = 0; projection_id < slice_size; ++projection_id) {
+        int offset1 = 3*4*projection_id;
+	    int offset2 = detector_rows * detector_columns *projection_id;
+	    int offset3 = num_voxels * num_voxels *projection_id;
         // std::cout << "rank " << mpi_rank << " id " << projection_id << std::endl;
         // TODO: Use OpenMP to parallelise local calculation
         // #pragma omp parallel loop
@@ -182,9 +185,9 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
                 float vol_det_map_0 = 0, vol_det_map_1 = 0, vol_det_map_2 = 0;
                 for (uint64_t j = 0; j < 4; ++j) {
                     float combined_val = (j == 2) ? gdata.z_voxel_coords[z] : gdata.combined_matrix[j * size + i];
-                    vol_det_map_0 += combined_val * pdata.transform_matrix[3*4*projection_id + j];
-                    vol_det_map_1 += combined_val * pdata.transform_matrix[3*4*projection_id + j + 4];
-                    vol_det_map_2 += combined_val * pdata.transform_matrix[3*4*projection_id + j + 4 + 4];
+                    vol_det_map_0 += combined_val * pdata.transform_matrix[offset1 + j];
+                    vol_det_map_1 += combined_val * pdata.transform_matrix[offset1 + j + 4];
+                    vol_det_map_2 += combined_val * pdata.transform_matrix[offset1 + j + 4 + 4];
                 }
                 int32_t map_col = std::round(vol_det_map_0 / vol_det_map_2);
                 int32_t map_row = std::round(vol_det_map_1 / vol_det_map_2);
@@ -194,8 +197,8 @@ void reconstruction(int num_voxels, const std::string &input_dir, const std::str
                 if (map_col >= 0 && map_row >= 0 && map_col < detector_columns && map_row < detector_rows) {
                     // Add the weighted projection pixel values to their corresponding voxels in the z slice
                     recon_volume[z * size + i] +=
-                            pdata.projection[detector_rows * detector_columns *projection_id + map_col + map_row * detector_columns] 
-                              * pdata.volume_weight[num_voxels * num_voxels *projection_id + i];
+                            pdata.projection[offset2 + map_col + map_row * detector_columns] 
+                              * pdata.volume_weight[offset3 + i];
                 }
             }
         }
